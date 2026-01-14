@@ -1,0 +1,8 @@
+[project]
+name = "2-jing-jung-community-be"
+version = "3.14.2"
+requires-python = "3.14.2"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.27",
+]
