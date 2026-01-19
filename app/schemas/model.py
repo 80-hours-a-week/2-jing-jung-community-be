@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
-
+from typing import Optional,Any
 
 class UserCreate(BaseModel):
     email: str
@@ -15,6 +14,34 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     nickname: str = Field(..., max_length=10, description="닉네임은 최대 10자")
 
+class UserCheck(BaseModel):
+    email: str
+    nickname: str
+    created_at: str
+    id: int
+
+class UserDelete(BaseModel):
+    id: int
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    nickname: str
+    created_at: str
+
+
+
+class CommentsCheck(BaseModel):
+    id: int
+    nickname: str
+    created_at: str
+    content: str
+
+class CommentResponse(BaseModel):
+    id: int
+    nickname: str
+    content: str
+    created_at: str
 
 
 
@@ -41,7 +68,8 @@ class PostResponse(BaseModel):
 
 
 
-
 class CommonResponse(BaseModel):
     message: str
-    data: Optional[object] = None
+    code: Optional[str] = None
+    data: Optional[Any] = None
+
