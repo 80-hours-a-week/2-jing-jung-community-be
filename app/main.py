@@ -8,7 +8,12 @@ import os
 
 app = FastAPI()
 
-origins = ["*"]
+origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    # TODO: "http://your-alb-address.com"와 같이 실제 ALB 주소를 추가해주세요. HTTPS를 사용한다면 https로 시작해야 합니다.
+    "http://your-alb-address.com",
+]
 
 app.add_middleware(
     CORSMiddleware,

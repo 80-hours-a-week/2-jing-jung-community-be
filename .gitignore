@@ -3,6 +3,8 @@
 .env.local
 .env.*.local
 
+main2.py
+
 # 로그 파일
 *.log
 npm-debug.log*
