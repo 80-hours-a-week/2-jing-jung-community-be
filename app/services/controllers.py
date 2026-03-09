@@ -78,7 +78,7 @@ def login_controller(email, password, response, db):
     db.commit()
 
     response.set_cookie(key="session_id", value=session_id, httponly=True, samesite="None", secure=True)
-    return {"message": "로그인 성공"}
+    return {"message": "로그인 성공", "session_id": session_id}
 
 
 # 3. 로그아웃
@@ -243,7 +243,7 @@ def like_post_controller(post_id, request, db):
     if existing:
         db.execute(text("DELETE FROM likes WHERE id=:lid"), {"lid": existing.id})
         if post.likes_count > 0: db.execute(text("UPDATE posts SET likes_count = likes_count - 1 WHERE id=:pid"),
-                                           {"pid": post_id})
+                                            {"pid": post_id})
     else:
         db.execute(text("INSERT INTO likes (user_id, post_id) VALUES (:uid, :pid)"), {"uid": user_id, "pid": post_id})
         db.execute(text("UPDATE posts SET likes_count = likes_count + 1 WHERE id=:pid"), {"pid": post_id})
@@ -361,3 +361,105 @@ def delete_user_controller(request, response, db):
     db.commit()
     response.delete_cookie("session_id")
     return {"message": "탈퇴 완료"}
+
+
+# --- Chat Controllers ---
+
+def initiate_chat_controller(recipient_id: int, request, db):
+    user_id = get_current_user_id(request, db)
+
+    if user_id == recipient_id:
+        raise HTTPException(status_code=400, detail="자기 자신과는 채팅할 수 없습니다.")
+
+    # 1:1 채팅방이 이미 존재하는지 확인
+    # 두 유저가 모두 참여하고 있는 방을 찾는다.
+    sql_find_room = text("""
+        SELECT p1.room_id
+        FROM chat_participants p1
+        JOIN chat_participants p2 ON p1.room_id = p2.room_id
+        WHERE p1.user_id = :user_id AND p2.user_id = :recipient_id
+    """)
+    result = db.execute(sql_find_room, {"user_id": user_id, "recipient_id": recipient_id}).fetchone()
+
+    if result:
+        # 이미 채팅방이 존재함
+        return {"room_id": result.room_id}
+
+    # 새 채팅방 생성
+    # controllers.py 수정
+    sql_create_room = text("INSERT INTO chat_rooms (created_at) VALUES (NOW())")
+    result = db.execute(sql_create_room)
+    db.commit()
+    new_room_id = result.lastrowid  # MySQL인 경우 매우 정확함
+
+    # 참가자 추가
+    sql_add_participants = text("INSERT INTO chat_participants (room_id, user_id) VALUES (:room_id, :user_id)")
+    db.execute(sql_add_participants, {"room_id": new_room_id, "user_id": user_id})
+    db.execute(sql_add_participants, {"room_id": new_room_id, "user_id": recipient_id})
+
+    db.commit()
+
+    return {"room_id": new_room_id}
+
+
+def get_chat_list_controller(request, db):
+    user_id = get_current_user_id(request, db)
+
+    # 사용자가 참여하고 있는 모든 채팅방과 상대방 정보, 마지막 메시지, 안읽은 메시지 수를 가져온다.
+    sql = text("""
+        SELECT
+            cr.id AS room_id,
+            other_user.id AS other_user_id,
+            other_user.nickname AS other_user_nickname,
+            other_user.image_url AS other_user_image_url,
+            last_message.content AS last_message_content,
+            last_message.created_at AS last_message_created_at,
+            (SELECT COUNT(id) FROM messages WHERE room_id = cr.id AND is_read = 0 AND sender_id != :user_id) AS unread_count
+        FROM chat_rooms cr
+        JOIN chat_participants cp_me ON cr.id = cp_me.room_id AND cp_me.user_id = :user_id
+        JOIN chat_participants cp_other ON cr.id = cp_other.room_id AND cp_other.user_id != :user_id
+        JOIN users other_user ON cp_other.user_id = other_user.id
+        LEFT JOIN (
+            SELECT 
+                m.room_id, 
+                m.content, 
+                m.created_at
+            FROM messages m
+            INNER JOIN (
+                SELECT room_id, MAX(created_at) as max_created_at
+                FROM messages
+                GROUP BY room_id
+            ) lm ON m.room_id = lm.room_id AND m.created_at = lm.max_created_at
+        ) AS last_message ON cr.id = last_message.room_id
+        ORDER BY last_message.created_at DESC;
+    """)
+
+    results = db.execute(sql, {"user_id": user_id}).fetchall()
+
+    return {"chats": [dict(row) for row in results]}
+
+
+def get_messages_controller(room_id: int, request, db):
+    user_id = get_current_user_id(request, db)
+
+    # 사용자가 이 채팅방의 참여자인지 확인
+    sql_check_participant = text("SELECT id FROM chat_participants WHERE room_id = :room_id AND user_id = :user_id")
+    if not db.execute(sql_check_participant, {"room_id": room_id, "user_id": user_id}).fetchone():
+        raise HTTPException(status_code=403, detail="채팅방에 접근할 권한이 없습니다.")
+
+    # 메시지 가져오기
+    sql_get_messages = text("""
+        SELECT id, sender_id, content, created_at, is_read
+        FROM messages
+        WHERE room_id = :room_id
+        ORDER BY created_at ASC
+    """)
+    messages = db.execute(sql_get_messages, {"room_id": room_id}).fetchall()
+
+    # 상대방이 보낸 메시지 읽음 처리
+    sql_mark_as_read = text(
+        "UPDATE messages SET is_read = 1 WHERE room_id = :room_id AND sender_id != :user_id AND is_read = 0")
+    db.execute(sql_mark_as_read, {"room_id": room_id, "user_id": user_id})
+    db.commit()
+
+    return {"messages": [dict(row) for row in messages]}
