@@ -75,3 +75,29 @@ class SessionData(Base):
     session_id = Column(String(128), primary_key=True)
     expires = Column(Integer, nullable=False)
     data = Column(Text, nullable=True)
+
+
+class ChatRoom(Base):
+    __tablename__ = "chat_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class ChatParticipant(Base):
+    __tablename__ = "chat_participants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, nullable=False)
+    sender_id = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    is_read = Column(Integer, default=0)
