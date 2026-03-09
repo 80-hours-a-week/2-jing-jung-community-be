@@ -117,3 +117,19 @@ def update_comment(comment_id: int, req: CommentRequest, request: Request, db: S
 @router.delete("/comments/{comment_id}")
 def delete_comment(comment_id: int, request: Request, db: Session = Depends(get_db)):
     return controllers.delete_comment_controller(comment_id, request, db)
+
+# --- Chat ---
+class ChatInitiateRequest(BaseModel):
+    recipient_id: int
+
+@router.get("/api/chats")
+def get_chat_list(request: Request, db: Session = Depends(get_db)):
+    return controllers.get_chat_list_controller(request, db)
+
+@router.post("/api/chats")
+def initiate_chat(req: ChatInitiateRequest, request: Request, db: Session = Depends(get_db)):
+    return controllers.initiate_chat_controller(req.recipient_id, request, db)
+
+@router.get("/api/chats/{room_id}/messages")
+def get_messages(room_id: int, request: Request, db: Session = Depends(get_db)):
+    return controllers.get_messages_controller(room_id, request, db)
