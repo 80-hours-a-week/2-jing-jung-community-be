@@ -17,9 +17,8 @@ from sqlalchemy import text
 app = FastAPI()
 
 # --- Redis 및 WebSocket 설정 ---
-# 로컬 테스트 시 "redis://localhost"를 사용하세요.
-# 나중에 AWS ElastiCache 등을 사용하면 해당 주소로 바꾸면 됩니다.
-REDIS_URL = "redis://localhost"
+# 환경 변수에서 Redis URL을 가져오고, 없으면 기본값으로 "redis://localhost"를 사용합니다.
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost")
 redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
 
 

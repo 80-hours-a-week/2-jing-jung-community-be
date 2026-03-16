@@ -1,0 +1,84 @@
+# backend-deployment.yaml
+
+# 1. IAM Role과 연결할 ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-sa
+  namespace: default
+  annotations:
+    # Terraform `iam.tf`에 정의된 IAM Role의 ARN을 여기에 입력해야 합니다.
+    eks.amazonaws.com/role-arn: "arn:aws:iam::${016562553479}:role/community-backend-app-role"
+
+---
+# 2. AWS Secrets Manager와 연동하기 위한 SecretProviderClass
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: community-db-creds-provider
+  namespace: default
+spec:
+  provider: aws
+  parameters:
+    # Terraform `rds.tf`에서 생성한 Secrets Manager Secret의 이름을 지정합니다.
+    objectName: "community-db-credentials"
+    objectType: "secretsmanager"
+  # 이 SecretProviderClass를 통해 생성될 Kubernetes Secret의 이름
+  secretObjects:
+    - secretName: backend-db-secrets
+      type: Opaque
+      data:
+        # Secrets Manager에 있는 JSON 키를 Kubernetes Secret의 키로 매핑합니다.
+        - objectName: "DB_HOST"
+          key: community-db-instance.czek4w6ees7p.ap-southeast-2.rds.amazonaws.com
+        - objectName: "DB_PORT"
+          key: DB_PORT
+        - objectName: "DB_USER"
+          key: DB_USER
+        - objectName: "DB_PASSWORD"
+          key: DB_PASSWORD
+        - objectName: "DB_NAME"
+          key: communitydb
+
+---
+# 3. 수정된 Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment # GitHub Actions에서 사용한 이름과 일치해야 합니다.
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # 1번에서 만든 ServiceAccount를 사용하도록 지정
+      serviceAccountName: backend-sa
+      containers:
+        - name: backend-container
+          # 백엔드 ECR 이미지 주소를 여기에 입력하세요.
+          image: "${016562553479}.dkr.ecr.ap-southeast-2.amazonaws.com/community-be:latest" # `${ACCOUNT_ID}`와 리전을 확인하세요.
+          ports:
+            - containerPort: 8000
+          # Secrets Store CSI Driver가 만든 Kubernetes Secret을 환경변수로 주입
+          envFrom:
+            - secretRef:
+                name: backend-db-secrets
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+      # CSI 볼륨 정의
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              # 2번에서 만든 SecretProviderClass의 이름을 지정
+              secretProviderClass: "community-db-creds-provider"

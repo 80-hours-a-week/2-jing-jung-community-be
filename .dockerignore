@@ -1,27 +1,30 @@
-# Git 관련
+# Git
 .git
 .gitignore
 
-# 환경변수 (가장 중요!)
+# IDE
+.idea
+.vscode
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Environment
 .env
-.env.local
-.env.*
 
-# 의존성 (Dockerfile에서 npm install)
-node_modules
-**/node_modules
+# alembic
+alembic/
+alembic.ini
 
-# 빌드 결과물
-dist
-build
-*.log
+# Other
+*.swp
+*.swo
 
-# 소스맵/테스트
-*.map
-coverage/
-__tests__/
-
-# Docker 자체 파일
-Dockerfile
-.dockerignore
-README.md
+main2.py

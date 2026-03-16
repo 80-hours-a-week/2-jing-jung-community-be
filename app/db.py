@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
+from sqlalchemy.orm import sessionmaker
 import os
 
 # 1. .env 파일 로드
@@ -18,6 +19,10 @@ SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{user}:{password}@{host}:{port}/{db_
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def get_db():
-    with engine.connect() as connection:
-        yield connection
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -14,5 +14,6 @@ dependencies = [
   "pymysql",            # <-- MySQL 연결을 위한 드라이버 (필수)
   "python-dotenv",       # <-- .env 파일을 읽기 위해 필요
   "bcrypt",
-  "python-multipart"
+  "python-multipart",
+  "aioredis"
 ]
