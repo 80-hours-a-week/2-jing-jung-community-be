@@ -8,7 +8,7 @@ metadata:
   namespace: default
   annotations:
     # Terraform `iam.tf`에 정의된 IAM Role의 ARN을 여기에 입력해야 합니다.
-    eks.amazonaws.com/role-arn: "arn:aws:iam::${016562553479}:role/community-backend-app-role"
+    eks.amazonaws.com/role-arn: "arn:aws:iam::016562553479:role/community-backend-app-role"
 
 ---
 # 2. AWS Secrets Manager와 연동하기 위한 SecretProviderClass
@@ -30,7 +30,7 @@ spec:
       data:
         # Secrets Manager에 있는 JSON 키를 Kubernetes Secret의 키로 매핑합니다.
         - objectName: "DB_HOST"
-          key: community-db-instance.czek4w6ees7p.ap-southeast-2.rds.amazonaws.com
+          key: DB_HOST
         - objectName: "DB_PORT"
           key: DB_PORT
         - objectName: "DB_USER"
@@ -38,7 +38,7 @@ spec:
         - objectName: "DB_PASSWORD"
           key: DB_PASSWORD
         - objectName: "DB_NAME"
-          key: communitydb
+          key: DB_NAME
 
 ---
 # 3. 수정된 Backend Deployment
@@ -62,7 +62,7 @@ spec:
       containers:
         - name: backend-container
           # 백엔드 ECR 이미지 주소를 여기에 입력하세요.
-          image: "${016562553479}.dkr.ecr.ap-southeast-2.amazonaws.com/community-be:latest" # `${ACCOUNT_ID}`와 리전을 확인하세요.
+          image: "016562553479.dkr.ecr.ap-southeast-2.amazonaws.com/community-be:latest" # `${ACCOUNT_ID}`와 리전을 확인하세요.
           ports:
             - containerPort: 8000
           # Secrets Store CSI Driver가 만든 Kubernetes Secret을 환경변수로 주입
