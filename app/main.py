@@ -55,7 +55,7 @@ manager = ConnectionManager()
 origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://your-alb-address.com",  # 실제 ALB 주소로 변경 필요
+    "http://k8s-default-mainingr-ffc4d92d4c-1904231776.ap-southeast-2.elb.amazonaws.com"
 ]
 
 app.add_middleware(
