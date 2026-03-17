@@ -21,7 +21,7 @@ spec:
   provider: aws
   parameters:
     # Terraform `rds.tf`에서 생성한 Secrets Manager Secret의 이름을 지정합니다.
-    objectName: "community-db-credentials"
+    objectName: "community-db-credentials-v2"
     objectType: "secretsmanager"
   # 이 SecretProviderClass를 통해 생성될 Kubernetes Secret의 이름
   secretObjects:
