@@ -11,36 +11,6 @@ metadata:
     eks.amazonaws.com/role-arn: "arn:aws:iam::016562553479:role/community-backend-app-role"
 
 ---
-# 2. AWS Secrets Manager와 연동하기 위한 SecretProviderClass
-apiVersion: secrets-store.csi.x-k8s.io/v1
-kind: SecretProviderClass
-metadata:
-  name: community-db-creds-provider
-  namespace: default
-spec:
-  provider: aws
-  parameters:
-    # Terraform `rds.tf`에서 생성한 Secrets Manager Secret의 이름을 지정합니다.
-    objectName: "community-db-credentials-v2"
-    objectType: "secretsmanager"
-  # 이 SecretProviderClass를 통해 생성될 Kubernetes Secret의 이름
-  secretObjects:
-    - secretName: backend-db-secrets
-      type: Opaque
-      data:
-        # Secrets Manager에 있는 JSON 키를 Kubernetes Secret의 키로 매핑합니다.
-        - objectName: "DB_HOST"
-          key: DB_HOST
-        - objectName: "DB_PORT"
-          key: DB_PORT
-        - objectName: "DB_USER"
-          key: DB_USER
-        - objectName: "DB_PASSWORD"
-          key: DB_PASSWORD
-        - objectName: "DB_NAME"
-          key: DB_NAME
-
----
 # 3. 수정된 Backend Deployment
 apiVersion: apps/v1
 kind: Deployment
