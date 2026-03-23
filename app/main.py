@@ -9,7 +9,7 @@ import json
 import asyncio
 from typing import Dict
 from datetime import datetime
-import aioredis
+# import aioredis
 
 from app.db import SessionLocal
 from sqlalchemy import text
@@ -18,8 +18,8 @@ app = FastAPI()
 
 # --- Redis 및 WebSocket 설정 ---
 # 환경 변수에서 Redis URL을 가져오고, 없으면 기본값으로 "redis://localhost"를 사용합니다.
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost")
-redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+# REDIS_URL = os.getenv("REDIS_URL", "redis://localhost")
+# redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
 
 
 class ConnectionManager:
@@ -55,7 +55,9 @@ manager = ConnectionManager()
 origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://k8s-default-mainingr-ffc4d92d4c-1904231776.ap-southeast-2.elb.amazonaws.com"
+    "http://k8s-default-mainingr-ffc4d92d4c-1904231776.ap-southeast-2.elb.amazonaws.com",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500"
 ]
 
 app.add_middleware(
