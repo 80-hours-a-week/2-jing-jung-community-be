@@ -5,8 +5,10 @@ import os
 import uuid
 import shutil
 import random
+from datetime import datetime
 
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif'}
+
 
 def save_image(file: UploadFile) -> str:
     if not file or not file.filename:
@@ -100,11 +102,12 @@ def logout_controller(request, response, db):
 # 4. 내 정보 조회
 def get_me_controller(request, db):
     user_id = get_current_user_id(request, db)
-    user = db.execute(text("SELECT id, email, nickname, image_url FROM users WHERE id = :uid"),
+    user = db.execute(text("SELECT id, email, nickname, image_url, turnip_amount, bell_amount FROM users WHERE id = :uid"),
                       {"uid": user_id}).fetchone()
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-    return {"id": user.id, "email": user.email, "nickname": user.nickname, "profile_image": user.image_url}
+    return {"id": user.id, "email": user.email, "nickname": user.nickname, "profile_image": user.image_url,
+            "turnip": user.turnip_amount or 0, "bell": user.bell_amount or 0}
 
 
 # 5. 게시글 목록 (삭제된 글 제외)
@@ -508,35 +511,61 @@ def update_bio_controller(bio_data, request, db):
 
 
 # --- 무 주식 (Turnip Market) ---
+def get_daily_turnip_price():
+    # 오늘 날짜를 시드로 사용하여 항상 같은 가격을 반환
+    today_seed = int(datetime.now().strftime("%Y%m%d"))
+    random.seed(today_seed)
+    return random.randint(50, 600)
+
+
 def get_turnip_price_controller():
-    # 간단하게 랜덤 시세 생성 (프론트 표시용)
-    return {"current_price": random.randint(50, 600)}
+    return {"current_price": get_daily_turnip_price()}
 
 
 def trade_turnip_controller(trade_data, request, db):
     user_id = get_current_user_id(request, db)
     trade_type = trade_data.get("type")  # 'buy' or 'sell'
     quantity = trade_data.get("quantity")
-    price = trade_data.get("price")
-    total_cost = quantity * price
+    price_from_client = trade_data.get("price")
 
-    # 사용자 잔액 확인
-    user_sql = text("SELECT bell_amount FROM users WHERE id = :uid")
+    # 서버에서 현재 시세를 다시 확인하여 검증
+    current_server_price = get_daily_turnip_price()
+    if price_from_client != current_server_price:
+        raise HTTPException(status_code=400, detail="시세가 변경되었습니다. 다시 시도해주세요.")
+
+    total_cost = quantity * current_server_price
+
+    # 사용자 잔액 및 무 보유량 확인
+    user_sql = text("SELECT bell_amount, turnip_amount FROM users WHERE id = :uid")
     user = db.execute(user_sql, {"uid": user_id}).fetchone()
 
     if trade_type == 'buy':
         if user.bell_amount < total_cost:
             raise HTTPException(status_code=400, detail="벨이 부족합니다.")
-        update_sql = text("UPDATE users SET bell_amount = bell_amount - :cost WHERE id = :uid")
+        update_user_sql = text(
+            "UPDATE users SET bell_amount = bell_amount - :cost, turnip_amount = turnip_amount + :quantity WHERE id = :uid")
+    elif trade_type == 'sell':
+        if user.turnip_amount < quantity:
+            raise HTTPException(status_code=400, detail="보유한 무가 부족합니다.")
+        update_user_sql = text(
+            "UPDATE users SET bell_amount = bell_amount + :cost, turnip_amount = turnip_amount - :quantity WHERE id = :uid")
     else:
-        update_sql = text("UPDATE users SET bell_amount = bell_amount + :cost WHERE id = :uid")
+        raise HTTPException(status_code=400, detail="잘못된 거래 타입입니다.")
 
-    db.execute(update_sql, {"cost": total_cost, "uid": user_id})
+    db.execute(update_user_sql, {"cost": total_cost, "quantity": quantity, "uid": user_id})
 
     # 거래 내역 저장
-    log_sql = text("INSERT INTO turnip_transactions (user_id, type, quantity, price) VALUES (:uid, :type, :q, :p)")
-    db.execute(log_sql, {"uid": user_id, "type": trade_type, "q": quantity, "p": price})
+    log_sql = text(
+        "INSERT INTO turnip_transactions (user_id, type, quantity, price, created_at) VALUES (:uid, :type, :q, :p, NOW())")
+    db.execute(log_sql, {"uid": user_id, "type": trade_type, "q": quantity, "p": current_server_price})
 
     db.commit()
-    return {"message": "거래 성공",
-            "remaining_bells": user.bell_amount + (total_cost if trade_type == 'sell' else -total_cost)}
+
+    # 변경된 사용자 정보 다시 조회
+    updated_user = db.execute(user_sql, {"uid": user_id}).fetchone()
+
+    return {
+        "message": "거래 성공",
+        "bell_amount": updated_user.bell_amount,
+        "turnip_amount": updated_user.turnip_amount
+    }
