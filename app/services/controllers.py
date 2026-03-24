@@ -1,4 +1,4 @@
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, Request
 from sqlalchemy import text
 import bcrypt
 import os
@@ -24,8 +24,13 @@ def save_image(file: UploadFile) -> str:
     return f"/static/images/{filename}"
 
 
-def get_current_user_id(request, db):
+def get_current_user_id(request: Request, db):
     session_id = request.cookies.get("session_id")
+    auth_header = request.headers.get("Authorization")
+
+    if not session_id and auth_header and auth_header.startswith("Bearer "):
+        session_id = auth_header.split(" ")[1]
+
     if not session_id:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
@@ -97,6 +102,8 @@ def get_me_controller(request, db):
     user_id = get_current_user_id(request, db)
     user = db.execute(text("SELECT id, email, nickname, image_url FROM users WHERE id = :uid"),
                       {"uid": user_id}).fetchone()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
     return {"id": user.id, "email": user.email, "nickname": user.nickname, "profile_image": user.image_url}
 
 

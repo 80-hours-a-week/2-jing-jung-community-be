@@ -67,7 +67,7 @@ def delete_user(request: Request, response: Response, db: Session = Depends(get_
 def get_posts(offset: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return controllers.get_posts_list_controller(offset, limit, db)
 
-@router.post("/api/posts", status_code=201) # 프론트 경로 맞춤
+@router.post("/posts", status_code=201) # 프론트 경로 맞춤
 def create_post(
     request: Request,
     title: str = Form(...),
@@ -81,7 +81,7 @@ def create_post(
 def get_post_detail(post_id: int, request: Request, db: Session = Depends(get_db)):
     return controllers.get_post_detail_controller(post_id, request, db)
 
-@router.put("/api/posts/{post_id}") # 프론트 경로 맞춤
+@router.put("/posts/{post_id}") # 프론트 경로 맞춤
 def update_post(
     post_id: int,
     request: Request,
@@ -122,38 +122,38 @@ def delete_comment(comment_id: int, request: Request, db: Session = Depends(get_
 class ChatInitiateRequest(BaseModel):
     recipient_id: int
 
-@router.get("/api/chats")
+@router.get("/chats")
 def get_chat_list(request: Request, db: Session = Depends(get_db)):
     return controllers.get_chat_list_controller(request, db)
 
-@router.post("/api/chats")
+@router.post("/chats")
 def initiate_chat(req: ChatInitiateRequest, request: Request, db: Session = Depends(get_db)):
     return controllers.initiate_chat_controller(req.recipient_id, request, db)
 
-@router.get("/api/chats/{room_id}/messages")
+@router.get("/chats/{room_id}/messages")
 def get_messages(room_id: int, request: Request, db: Session = Depends(get_db)):
     return controllers.get_messages_controller(room_id, request, db)
 
 # --- Map & Users ---
-@router.get("/api/users/locations")
+@router.get("/users/locations")
 def get_users_locations(db: Session = Depends(get_db)):
     return controllers.get_all_users_locations_controller(db)
 
 # --- Train ---
-@router.post("/api/train/reserve")
+@router.post("/train/reserve")
 def reserve_train(data: dict, request: Request, db: Session = Depends(get_db)):
     return controllers.reserve_train_controller(data, request, db)
 
 # --- Matching (Bio) ---
-@router.patch("/api/users/me/bio")
+@router.patch("/users/me/bio")
 def update_bio(data: dict, request: Request, db: Session = Depends(get_db)):
     return controllers.update_bio_controller(data, request, db)
 
 # --- Turnip Market ---
-@router.get("/api/turnips/price")
+@router.get("/turnips/price")
 def get_turnip_price():
     return controllers.get_turnip_price_controller()
 
-@router.post("/api/turnips/trade")
+@router.post("/turnips/trade")
 def trade_turnip(data: dict, request: Request, db: Session = Depends(get_db)):
     return controllers.trade_turnip_controller(data, request, db)
