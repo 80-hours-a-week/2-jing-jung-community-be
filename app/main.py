@@ -17,6 +17,7 @@ from sqlalchemy import text
 app = FastAPI()
 
 # --- Redis 및 WebSocket 설정 ---
+# AWS ElastiCache for Redis 또는 로컬 Redis 서버 사용 시 주석을 해제하세요.
 # 환경 변수에서 Redis URL을 가져오고, 없으면 기본값으로 "redis://localhost"를 사용합니다.
 # REDIS_URL = os.getenv("REDIS_URL", "redis://localhost")
 # redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
@@ -43,7 +44,7 @@ class ConnectionManager:
         await websocket.send_text(message)
 
     async def broadcast_to_local(self, room_id: int, message: str):
-        """현재 서버에 접속 중인 유저들에게만 발송 (Redis로부터 받은 메시지 전파용)"""
+        """현재 서버 인스턴스에 연결된 클라이언트에게만 메시지를 브로드캐스트합니다."""
         if room_id in self.active_connections:
             for connection in self.active_connections[room_id]:
                 await connection.send_text(message)
@@ -70,7 +71,7 @@ app.add_middleware(
 app.include_router(router)
 
 
-# --- WebSocket Endpoint (Redis Pub/Sub 통합) ---
+# --- WebSocket Endpoint (로컬 테스트용) ---
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: int, token: str = ""):
     db = SessionLocal()
@@ -95,24 +96,25 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int, token: str = ""
             await websocket.close(code=1008)
             return
 
-        # 3. 매니저 등록 및 Redis 구독 시작
+        # 3. 로컬 커넥션 매니저에 등록
         await manager.connect(room_id, websocket)
-        pubsub = redis_client.pubsub()
-        await pubsub.subscribe(f"chat_room_{room_id}")
 
-        # Redis 메시지를 감시하다가 현재 서버 접속자들에게 뿌려주는 Task
-        async def redis_listener():
-            try:
-                async for message in pubsub.listen():
-                    if message['type'] == 'message':
-                        # Redis에서 받은 메시지를 현재 서버의 해당 방 사람들에게 브로드캐스트
-                        await manager.broadcast_to_local(room_id, message['data'])
-            except Exception as e:
-                print(f"Redis Listener Error: {e}")
+        # --- Redis Pub/Sub 관련 로직 (주석 처리) ---
+        # pubsub = redis_client.pubsub()
+        # await pubsub.subscribe(f"chat_room_{room_id}")
+        #
+        # async def redis_listener():
+        #     try:
+        #         async for message in pubsub.listen():
+        #             if message['type'] == 'message':
+        #                 await manager.broadcast_to_local(room_id, message['data'])
+        #     except Exception as e:
+        #         print(f"Redis Listener Error: {e}")
+        #
+        # listener_task = asyncio.create_task(redis_listener())
+        # --- Redis 관련 로직 끝 ---
 
-        listener_task = asyncio.create_task(redis_listener())
-
-        # 4. 메시지 수신 대기 루프
+        # 4. 메시지 수신 및 처리 루프
         try:
             while True:
                 data = await websocket.receive_text()
@@ -120,7 +122,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int, token: str = ""
                 content = message_data.get("content")
 
                 if content:
-                    # DB 저장
+                    # DB에 메시지 저장
                     insert_sql = text("""
                         INSERT INTO messages (room_id, sender_id, content, created_at, is_read)
                         VALUES (:room_id, :sender_id, :content, NOW(), 0)
@@ -132,18 +134,26 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int, token: str = ""
                     })
                     db.commit()
 
-                    # Redis Publish (이게 핵심! 다른 서버 인스턴스에도 메시지가 전달됨)
+                    # 응답 메시지 생성
                     response_message = {
                         "room_id": room_id,
                         "sender_id": sender_id,
                         "content": content,
-                        "created_at": datetime.now().isoformat()  # Send actual server time
+                        "created_at": datetime.now().isoformat()
                     }
-                    await redis_client.publish(f"chat_room_{room_id}", json.dumps(response_message))
+                    
+                    # 로컬 브로드캐스트: 현재 서버에 연결된 클라이언트에게만 전송
+                    await manager.broadcast_to_local(room_id, json.dumps(response_message))
+
+                    # --- Redis Publish (주석 처리) ---
+                    # 여러 서버 인스턴스 간 메시지 동기화를 위해 Redis에 메시지 발행
+                    # await redis_client.publish(f"chat_room_{room_id}", json.dumps(response_message))
 
         except WebSocketDisconnect:
-            listener_task.cancel()
-            await pubsub.unsubscribe(f"chat_room_{room_id}")
+            # --- Redis 관련 로직 (주석 처리) ---
+            # listener_task.cancel()
+            # await pubsub.unsubscribe(f"chat_room_{room_id}")
+            # --- Redis 관련 로직 끝 ---
             manager.disconnect(room_id, websocket)
 
     finally:

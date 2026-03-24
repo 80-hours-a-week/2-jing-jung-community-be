@@ -4,6 +4,7 @@ import bcrypt
 import os
 import uuid
 import shutil
+import random
 
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif'}
 
@@ -463,3 +464,72 @@ def get_messages_controller(room_id: int, request, db):
     db.commit()
 
     return {"messages": [dict(row) for row in messages]}
+
+
+# --- 지도 및 사용자 위치 ---
+def get_all_users_locations_controller(db):
+    # 지도에 뿌려줄 모든 사용자의 간단한 정보 조회
+    sql = text("SELECT id, nickname, image_url FROM users WHERE deleted_at IS NULL")
+    users = db.execute(sql).fetchall()
+    return [{"id": u.id, "nickname": u.nickname, "image_url": u.image_url} for u in users]
+
+
+# --- 기차표 예매 ---
+def reserve_train_controller(train_data, request, db):
+    user_id = get_current_user_id(request, db)
+    # 실제 환경에서는 Redis 대기열 로직이 들어가야 하지만, 로컬용으로 즉시 저장 구현
+    sql = text("""
+        INSERT INTO train_reservations (user_id, train_number, departure_time)
+        VALUES (:uid, :t_num, :d_time)
+    """)
+    db.execute(sql, {
+        "uid": user_id,
+        "t_num": train_data.get("train_number"),
+        "d_time": train_data.get("departure_time")
+    })
+    db.commit()
+    return {"message": "예약이 완료되었습니다.", "queue_number": 0}
+
+
+# --- 소개팅 (Matching) ---
+def update_bio_controller(bio_data, request, db):
+    user_id = get_current_user_id(request, db)
+    sql = text("UPDATE users SET bio = :bio WHERE id = :uid")  # User 테이블에 bio 컬럼 필요
+    db.execute(sql, {"bio": bio_data.get("bio"), "uid": user_id})
+    db.commit()
+    return {"message": "소개글이 수정되었습니다."}
+
+
+# --- 무 주식 (Turnip Market) ---
+def get_turnip_price_controller():
+    # 간단하게 랜덤 시세 생성 (프론트 표시용)
+    return {"current_price": random.randint(50, 600)}
+
+
+def trade_turnip_controller(trade_data, request, db):
+    user_id = get_current_user_id(request, db)
+    trade_type = trade_data.get("type")  # 'buy' or 'sell'
+    quantity = trade_data.get("quantity")
+    price = trade_data.get("price")
+    total_cost = quantity * price
+
+    # 사용자 잔액 확인
+    user_sql = text("SELECT bell_amount FROM users WHERE id = :uid")
+    user = db.execute(user_sql, {"uid": user_id}).fetchone()
+
+    if trade_type == 'buy':
+        if user.bell_amount < total_cost:
+            raise HTTPException(status_code=400, detail="벨이 부족합니다.")
+        update_sql = text("UPDATE users SET bell_amount = bell_amount - :cost WHERE id = :uid")
+    else:
+        update_sql = text("UPDATE users SET bell_amount = bell_amount + :cost WHERE id = :uid")
+
+    db.execute(update_sql, {"cost": total_cost, "uid": user_id})
+
+    # 거래 내역 저장
+    log_sql = text("INSERT INTO turnip_transactions (user_id, type, quantity, price) VALUES (:uid, :type, :q, :p)")
+    db.execute(log_sql, {"uid": user_id, "type": trade_type, "q": quantity, "p": price})
+
+    db.commit()
+    return {"message": "거래 성공",
+            "remaining_bells": user.bell_amount + (total_cost if trade_type == 'sell' else -total_cost)}

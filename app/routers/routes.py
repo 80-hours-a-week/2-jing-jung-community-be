@@ -133,3 +133,27 @@ def initiate_chat(req: ChatInitiateRequest, request: Request, db: Session = Depe
 @router.get("/api/chats/{room_id}/messages")
 def get_messages(room_id: int, request: Request, db: Session = Depends(get_db)):
     return controllers.get_messages_controller(room_id, request, db)
+
+# --- Map & Users ---
+@router.get("/api/users/locations")
+def get_users_locations(db: Session = Depends(get_db)):
+    return controllers.get_all_users_locations_controller(db)
+
+# --- Train ---
+@router.post("/api/train/reserve")
+def reserve_train(data: dict, request: Request, db: Session = Depends(get_db)):
+    return controllers.reserve_train_controller(data, request, db)
+
+# --- Matching (Bio) ---
+@router.patch("/api/users/me/bio")
+def update_bio(data: dict, request: Request, db: Session = Depends(get_db)):
+    return controllers.update_bio_controller(data, request, db)
+
+# --- Turnip Market ---
+@router.get("/api/turnips/price")
+def get_turnip_price():
+    return controllers.get_turnip_price_controller()
+
+@router.post("/api/turnips/trade")
+def trade_turnip(data: dict, request: Request, db: Session = Depends(get_db)):
+    return controllers.trade_turnip_controller(data, request, db)

@@ -11,6 +11,9 @@ class User(Base):
     email = Column(String(255), nullable=False)
     image_url = Column(String(255), nullable=False)
     password = Column(String(255), nullable=False)
+    bell_amount = Column(Integer, default=2000)
+    turnip_amount = Column(Integer, default=0)
+    bio = Column(Text, nullable=True)
 
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, nullable=True)
@@ -101,3 +104,21 @@ class Message(Base):
     content = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
     is_read = Column(Integer, default=0)
+
+class TrainReservation(Base):
+    __tablename__ = "train_reservations"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    train_number = Column(String(50), nullable=False)
+    departure_time = Column(TIMESTAMP, nullable=False)
+    status = Column(String(20), default="reserved") # reserved, canceled
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+class TurnipTransaction(Base):
+    __tablename__ = "turnip_transactions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    type = Column(String(10), nullable=False) # buy, sell
+    quantity = Column(Integer, nullable=False)
+    price = Column(Integer, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
