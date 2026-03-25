@@ -136,6 +136,7 @@ def get_posts_list_controller(offset, limit, db):
     for p in posts:
         results.append({
             "post_id": p.id,
+            "user_id": p.user_id,
             "title": p.title,
             "contents": p.contents,
             "image": p.image_url,
