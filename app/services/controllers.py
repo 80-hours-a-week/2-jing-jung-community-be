@@ -453,8 +453,7 @@ def get_chat_list_controller(request, db):
 
     results = db.execute(sql, {"user_id": user_id}).fetchall()
 
-    return {"chats": [dict(row) for row in results]}
-
+    return {"chats": [dict(row._mapping) for row in results]}
 
 def get_messages_controller(room_id: int, request, db):
     user_id = get_current_user_id(request, db)
@@ -479,8 +478,7 @@ def get_messages_controller(room_id: int, request, db):
     db.execute(sql_mark_as_read, {"room_id": room_id, "user_id": user_id})
     db.commit()
 
-    return {"messages": [dict(row) for row in messages]}
-
+    return {"messages": [dict(row._mapping) for row in messages]}
 
 # --- 지도 및 사용자 위치 ---
 def get_all_users_locations_controller(db):
