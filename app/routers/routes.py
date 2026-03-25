@@ -148,6 +148,10 @@ def reserve_train(train_data: dict, request: Request, db: Session = Depends(get_
 def get_my_train_reservations(request: Request, db: Session = Depends(get_db)):
     return controllers.get_my_train_reservations_controller(request, db)
 
+@router.delete("/train/reservations/{reservation_id}")
+def delete_train_reservation(reservation_id: int, request: Request, db: Session = Depends(get_db)):
+    return controllers.delete_train_reservation_controller(reservation_id, request, db)
+
 # --- Matching (Bio) ---
 @router.get("/users/matching")
 def get_matching_users(request: Request, db: Session = Depends(get_db)):

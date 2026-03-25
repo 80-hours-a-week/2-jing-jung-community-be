@@ -545,6 +545,20 @@ def get_my_train_reservations_controller(request, db):
         })
     return {"reservations": results}
 
+def delete_train_reservation_controller(reservation_id, request, db):
+    user_id = get_current_user_id(request, db)
+
+    # 내 예약이 맞는지 확인하고 삭제 진행
+    sql = text("DELETE FROM train_reservations WHERE id = :res_id AND user_id = :uid")
+    result = db.execute(sql, {"res_id": reservation_id, "uid": user_id})
+    db.commit()
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="존재하지 않거나 이미 취소된 기차표입니다.")
+
+    return {"message": "예매가 성공적으로 취소되었습니다."}
+
+
 # --- 소개팅 (Matching) ---
 def update_bio_controller(bio_data, request, db):
     user_id = get_current_user_id(request, db)
