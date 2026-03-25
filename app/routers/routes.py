@@ -145,15 +145,19 @@ def reserve_train(data: dict, request: Request, db: Session = Depends(get_db)):
     return controllers.reserve_train_controller(data, request, db)
 
 # --- Matching (Bio) ---
+@router.get("/users/matching")
+def get_matching_users(request: Request, db: Session = Depends(get_db)):
+    return controllers.get_matching_users_controller(request, db)
+
 @router.patch("/users/me/bio")
 def update_bio(data: dict, request: Request, db: Session = Depends(get_db)):
     return controllers.update_bio_controller(data, request, db)
 
-# --- Turnip Market ---
+# --- 무 주식 (Turnip Market) ---
 @router.get("/turnips/price")
 def get_turnip_price():
     return controllers.get_turnip_price_controller()
 
 @router.post("/turnips/trade")
-def trade_turnip(data: dict, request: Request, db: Session = Depends(get_db)):
-    return controllers.trade_turnip_controller(data, request, db)
+def trade_turnips(trade_data: dict, request: Request, db: Session = Depends(get_db)):
+    return controllers.trade_turnip_controller(trade_data, request, db)

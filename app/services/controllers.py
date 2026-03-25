@@ -102,13 +102,33 @@ def logout_controller(request, response, db):
 # 4. 내 정보 조회
 def get_me_controller(request, db):
     user_id = get_current_user_id(request, db)
-    user = db.execute(text("SELECT id, email, nickname, image_url, turnip_amount, bell_amount FROM users WHERE id = :uid"),
-                      {"uid": user_id}).fetchone()
+    user = db.execute(
+        text("SELECT id, email, nickname, image_url, turnip_amount, bell_amount, bio FROM users WHERE id = :uid"),
+        {"uid": user_id}).fetchone()
+
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-    return {"id": user.id, "email": user.email, "nickname": user.nickname, "profile_image": user.image_url,
-            "turnip_amount": user.turnip_amount or 0, "bell_amount": user.bell_amount or 0}
 
+    return {
+        "id": user.id,
+        "email": user.email,
+        "nickname": user.nickname,
+        "profile_image": user.image_url,
+        "turnip": user.turnip_amount or 0,
+        "bell": user.bell_amount or 0,
+        "bio": user.bio
+    }
+
+# 4. 소개팅 (Matching)
+def get_matching_users_controller(request, db):
+    user_id = get_current_user_id(request, db)
+    sql = text("""
+        SELECT id, nickname, image_url AS profile_image, bio 
+        FROM users 
+        WHERE id != :uid AND bio IS NOT NULL AND deleted_at IS NULL
+    """)
+    users = db.execute(sql, {"uid": user_id}).fetchall()
+    return [dict(row._mapping) for row in users]
 
 # 5. 게시글 목록 (삭제된 글 제외)
 def get_posts_list_controller(offset, limit, db):
