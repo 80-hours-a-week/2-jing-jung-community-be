@@ -115,6 +115,8 @@ def get_posts_list_controller(offset, limit, db):
     sql = text("""
                SELECT p.id,
                       p.title,
+                      p.contents,
+                      p.image_url,
                       p.likes_count,
                       p.views_count,
                       p.comments_count,
@@ -134,6 +136,8 @@ def get_posts_list_controller(offset, limit, db):
         results.append({
             "post_id": p.id,
             "title": p.title,
+            "contents": p.contents,
+            "image": p.image_url,
             "likes": p.likes_count,
             "comments": p.comments_count,
             "views": p.views_count,
