@@ -524,6 +524,26 @@ def reserve_train_controller(train_data, request, db):
     db.commit()
     return {"message": "예약이 완료되었습니다.", "queue_number": 0}
 
+def get_my_train_reservations_controller(request, db):
+    user_id = get_current_user_id(request, db)
+    # 예약 시간이 가까운 순서대로 내 티켓을 불러옵니다.
+    sql = text("""
+        SELECT id, train_number, departure_time, status, created_at
+        FROM train_reservations
+        WHERE user_id = :uid
+        ORDER BY departure_time DESC
+    """)
+    reservations = db.execute(sql, {"uid": user_id}).fetchall()
+
+    results = []
+    for r in reservations:
+        results.append({
+            "id": r.id,
+            "train_number": r.train_number,
+            "departure_time": str(r.departure_time),  # 날짜를 문자열로 변환
+            "status": r.status
+        })
+    return {"reservations": results}
 
 # --- 소개팅 (Matching) ---
 def update_bio_controller(bio_data, request, db):

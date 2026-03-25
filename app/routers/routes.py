@@ -139,10 +139,14 @@ def get_messages(room_id: int, request: Request, db: Session = Depends(get_db)):
 def get_users_locations(db: Session = Depends(get_db)):
     return controllers.get_all_users_locations_controller(db)
 
-# --- Train ---
+# --- 기차 (Train) ---
 @router.post("/train/reserve")
-def reserve_train(data: dict, request: Request, db: Session = Depends(get_db)):
-    return controllers.reserve_train_controller(data, request, db)
+def reserve_train(train_data: dict, request: Request, db: Session = Depends(get_db)):
+    return controllers.reserve_train_controller(train_data, request, db)
+
+@router.get("/train/reservations")
+def get_my_train_reservations(request: Request, db: Session = Depends(get_db)):
+    return controllers.get_my_train_reservations_controller(request, db)
 
 # --- Matching (Bio) ---
 @router.get("/users/matching")
