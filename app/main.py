@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 app = FastAPI()
 
+
 # --- Redis 및 WebSocket 설정 ---
 # AWS ElastiCache for Redis 또는 로컬 Redis 서버 사용 시 주석을 해제하세요.
 # 환경 변수에서 Redis URL을 가져오고, 없으면 기본값으로 "redis://localhost"를 사용합니다.
@@ -73,21 +74,22 @@ app.include_router(router)
 
 # --- WebSocket Endpoint (로컬 테스트용) ---
 @app.websocket("/ws/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: int, token: str = ""):
+async def websocket_endpoint(websocket: WebSocket, room_id: int):  # token 파라미터 삭제
     db = SessionLocal()
     sender_id = None
 
     try:
-        # 1. 인증 로직
+        token = websocket.cookies.get("session_id")
         if not token:
             await websocket.close(code=1008)
             return
 
         sql = text("SELECT data FROM sessions WHERE session_id = :session_id")
-        result = db.execute(sql, {"session_id": token}).fetchone()
-        if not result:
-            await websocket.close(code=1008)
+        result = db.execute(sql, {"session_id": session_id}).fetchone()
+        if not result or not result.data:
+            await websocket.close(code=4001, reason="Authentication failed")
             return
+
         sender_id = int(result.data)
 
         # 2. 참여 권한 확인
@@ -141,7 +143,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int, token: str = ""
                         "content": content,
                         "created_at": datetime.now().isoformat()
                     }
-                    
+
                     # 로컬 브로드캐스트: 현재 서버에 연결된 클라이언트에게만 전송
                     await manager.broadcast_to_local(room_id, json.dumps(response_message))
 

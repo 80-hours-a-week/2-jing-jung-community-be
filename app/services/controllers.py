@@ -114,6 +114,7 @@ def get_me_controller(request, db):
 def get_posts_list_controller(offset, limit, db):
     sql = text("""
                SELECT p.id,
+                      p.user_id,
                       p.title,
                       p.contents,
                       p.image_url,
