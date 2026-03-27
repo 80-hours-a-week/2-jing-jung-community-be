@@ -48,7 +48,8 @@ manager = ConnectionManager()
 origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://k8s-default-mainingr-ffc4d92d4c-1904231776.ap-southeast-2.elb.amazonaws.com",
+    "http://8s-default-frontend-98354d2ab1-2db1fd9f61233555.elb.ap-southeast-2.amazonaws.com:80",
+    "http://172.20.173.239:80"
     "http://127.0.0.1:5500",
     "http://localhost:5500"
 ]
