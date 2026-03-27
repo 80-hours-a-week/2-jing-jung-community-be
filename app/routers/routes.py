@@ -5,7 +5,7 @@ from app.db import get_db
 from app.services import controllers
 from pydantic import BaseModel
 
-router = APIRouter()
+router = APIRouter(prefix="/api")
 
 # --- Pydantic Schemas (요청 데이터 검증용) ---
 class UserLoginRequest(BaseModel):
