@@ -6,7 +6,6 @@ from app.routers.routes import router
 from fastapi.staticfiles import StaticFiles
 import os
 import json
-import asyncio
 from typing import Dict
 from datetime import datetime
 
@@ -51,6 +50,7 @@ origins = [
     "http://k8s-default-frontend-8fef7d5831-80aca46d4db480a0.elb.ap-southeast-2.amazonaws.com",
     "http://172.20.173.239:80",
     "http://127.0.0.1:5500",
+    "http://k8s-myprojectgroup-d8b90bd933-1793738250.ap-southeast-2.elb.amazonaws.com",
     "http://localhost:5500"
 ]
 
