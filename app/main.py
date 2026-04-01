@@ -12,7 +12,7 @@ from datetime import datetime
 from app.db import SessionLocal
 from sqlalchemy import text
 
-app = FastAPI()
+app = FastAPI(root_path="/api")
 
 
 class ConnectionManager:

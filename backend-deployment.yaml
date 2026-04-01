@@ -32,7 +32,7 @@ spec:
         - name: backend-container
           image: "016562553479.dkr.ecr.ap-southeast-2.amazonaws.com/community-be:latest"
           ports:
-            - containerPort: 8000
+            - containerPort: 5000
           env:
             - name: DB_HOST
               value: "$DB_HOST"
@@ -53,5 +53,5 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8000 # 백엔드 컨테이너 포트와 일치시켜야 합니다
+      targetPort: 5000 # 백엔드 컨테이너 포트와 일치시켜야 합니다
   type: ClusterIP # 프론트엔드에서 내부 통신용으로 사용
