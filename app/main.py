@@ -8,9 +8,12 @@ import os
 import json
 from typing import Dict
 from datetime import datetime
-
 from app.db import SessionLocal
 from sqlalchemy import text
+from app.db import engine
+from app.models import model
+
+model.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(root_path="/api")
 
