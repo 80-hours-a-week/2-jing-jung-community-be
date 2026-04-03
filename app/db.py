@@ -1,10 +1,7 @@
 from sqlalchemy import create_engine
-from dotenv import load_dotenv
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base # 👈 1. 여기 declarative_base 추가!
 import os
 
-# 1. .env 파일 로드
-# load_dotenv()
 
 # 2. 환경 변수에서 값 꺼내기
 user = os.getenv("DB_USER")
@@ -22,6 +19,9 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
 def get_db():
     db = SessionLocal()
     try:
