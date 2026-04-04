@@ -85,9 +85,7 @@ def login_controller(email, password, response, db):
     )
     db.commit()
 
-    response.set_cookie(key="session_id", value=session_id, httponly=True, samesite="None", secure=False)
-    return {"message": "로그인 성공", "session_id": session_id}
-
+    response.set_cookie(key="session_id", value=session_id, httponly=True, samesite="lax", secure=False)
 
 # 3. 로그아웃
 def logout_controller(request, response, db):
