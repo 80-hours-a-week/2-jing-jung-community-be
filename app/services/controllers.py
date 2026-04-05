@@ -584,40 +584,42 @@ def trade_turnip_controller(trade_data, request, db):
     quantity = trade_data.get("quantity")
     price_from_client = trade_data.get("price")
 
-    # 서버에서 현재 시세를 다시 확인하여 검증
     current_server_price = get_daily_turnip_price()
     if price_from_client != current_server_price:
         raise HTTPException(status_code=400, detail="시세가 변경되었습니다. 다시 시도해주세요.")
 
     total_cost = quantity * current_server_price
 
-    # 사용자 잔액 및 무 보유량 확인
     user_sql = text("SELECT bell_amount, turnip_amount FROM users WHERE id = :uid")
     user = db.execute(user_sql, {"uid": user_id}).fetchone()
 
+    current_bell = user.bell_amount if user.bell_amount is not None else 2000
+    current_turnip = user.turnip_amount if user.turnip_amount is not None else 0
+
     if trade_type == 'buy':
-        if user.bell_amount < total_cost:
+        if current_bell < total_cost:
             raise HTTPException(status_code=400, detail="벨이 부족합니다.")
-        update_user_sql = text(
-            "UPDATE users SET bell_amount = bell_amount - :cost, turnip_amount = turnip_amount + :quantity WHERE id = :uid")
+        # 파이썬에서 미리 계산해서 넣어주기
+        update_user_sql = text("UPDATE users SET bell_amount = :new_bell, turnip_amount = :new_turnip WHERE id = :uid")
+        db.execute(update_user_sql,
+                   {"new_bell": current_bell - total_cost, "new_turnip": current_turnip + quantity, "uid": user_id})
+
     elif trade_type == 'sell':
-        if user.turnip_amount < quantity:
+        if current_turnip < quantity:
             raise HTTPException(status_code=400, detail="보유한 무가 부족합니다.")
-        update_user_sql = text(
-            "UPDATE users SET bell_amount = bell_amount + :cost, turnip_amount = turnip_amount - :quantity WHERE id = :uid")
+        # 파이썬에서 미리 계산해서 넣어주기
+        update_user_sql = text("UPDATE users SET bell_amount = :new_bell, turnip_amount = :new_turnip WHERE id = :uid")
+        db.execute(update_user_sql,
+                   {"new_bell": current_bell + total_cost, "new_turnip": current_turnip - quantity, "uid": user_id})
     else:
         raise HTTPException(status_code=400, detail="잘못된 거래 타입입니다.")
 
-    db.execute(update_user_sql, {"cost": total_cost, "quantity": quantity, "uid": user_id})
-
-    # 거래 내역 저장
     log_sql = text(
         "INSERT INTO turnip_transactions (user_id, type, quantity, price, created_at) VALUES (:uid, :type, :q, :p, NOW())")
     db.execute(log_sql, {"uid": user_id, "type": trade_type, "q": quantity, "p": current_server_price})
 
     db.commit()
 
-    # 변경된 사용자 정보 다시 조회
     updated_user = db.execute(user_sql, {"uid": user_id}).fetchone()
 
     return {
