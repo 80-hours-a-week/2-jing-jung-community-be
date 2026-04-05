@@ -230,8 +230,12 @@ def get_post_detail_controller(post_id, request, db):
 def create_post_controller(title, contents, image, request, db):
     user_id = get_current_user_id(request, db)
     image_url = save_image(image)
-    sql = text(
-        "INSERT INTO posts (user_id, title, contents, image_url, created_at) VALUES (:uid, :title, :contents, :img, NOW())")
+
+    # 🚀 좋아요(likes_count), 조회수(views_count), 댓글수(comments_count)를 0으로 강제 삽입!
+    sql = text("""
+        INSERT INTO posts (user_id, title, contents, image_url, likes_count, views_count, comments_count, created_at) 
+        VALUES (:uid, :title, :contents, :img, 0, 0, 0, NOW())
+    """)
     db.execute(sql, {"uid": user_id, "title": title, "contents": contents, "img": image_url})
     db.commit()
     return {"message": "게시글 등록 성공"}
@@ -273,21 +277,25 @@ def like_post_controller(post_id, request, db):
     post = db.execute(text("SELECT * FROM posts WHERE id=:pid AND deleted_at IS NULL"), {"pid": post_id}).fetchone()
     if not post: raise HTTPException(status_code=404, detail="게시글 없음")
 
+    current_likes = post.likes_count if post.likes_count is not None else 0
     existing = db.execute(text("SELECT id FROM likes WHERE user_id=:uid AND post_id=:pid"),
                           {"uid": user_id, "pid": post_id}).fetchone()
     is_liked = False
+
     if existing:
         db.execute(text("DELETE FROM likes WHERE id=:lid"), {"lid": existing.id})
-        if post.likes_count > 0: db.execute(text("UPDATE posts SET likes_count = likes_count - 1 WHERE id=:pid"),
-                                            {"pid": post_id})
+        if current_likes > 0:
+            db.execute(text("UPDATE posts SET likes_count = :new_likes WHERE id=:pid"),
+                       {"new_likes": current_likes - 1, "pid": post_id})
     else:
         db.execute(text("INSERT INTO likes (user_id, post_id) VALUES (:uid, :pid)"), {"uid": user_id, "pid": post_id})
-        db.execute(text("UPDATE posts SET likes_count = likes_count + 1 WHERE id=:pid"), {"pid": post_id})
+        db.execute(text("UPDATE posts SET likes_count = :new_likes WHERE id=:pid"),
+                   {"new_likes": current_likes + 1, "pid": post_id})
         is_liked = True
+
     db.commit()
     updated = db.execute(text("SELECT likes_count FROM posts WHERE id=:pid"), {"pid": post_id}).fetchone()
-    return {"likes_count": updated.likes_count, "is_liked": is_liked}
-
+    return {"likes_count": updated.likes_count if updated.likes_count is not None else 0, "is_liked": is_liked}
 
 # 11. 댓글 작성
 def create_comment_controller(post_id, content, request, db):
