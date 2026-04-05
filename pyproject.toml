@@ -1,8 +1,18 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "2-jing-jung-community-be"
-version = "3.14.2"
-requires-python = "3.14.2"
+version = "0.1.0"
+# 도커 이미지 버전(3.11)과 맞추거나 범위를 넓혀줍니다.
+requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.27",
+  "sqlalchemy",         # <-- 여기에 'sqlalchemy.sql'이 아니라 이렇게 적어야 합니다.
+  "pymysql",            # <-- MySQL 연결을 위한 드라이버 (필수)
+  "bcrypt",
+  "python-multipart",
+  "aioredis"
 ]

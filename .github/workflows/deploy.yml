@@ -1,0 +1,44 @@
+name: Backend Deploy to ECR
+
+on:
+  push:
+    branches: [ main ] # 메인 브랜치에 푸시될 때 실행
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Images
+        run: |
+          # ECR 리포지토리 이름(community-be)이 AWS 콘솔과 똑같아야 합니다.
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/community-be:latest .
+          docker push ${{ steps.login-ecr.outputs.registry }}/community-be:latest
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name community-eks-cluster --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to EKS
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          envsubst < backend-deployment.yaml | kubectl apply -f -
+          kubectl rollout restart deployment backend-deployment

@@ -1,0 +1,59 @@
+# backend-deployment.yaml
+
+# 1. IAM Role과 연결할 ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-sa
+  namespace: default
+  annotations:
+    # Terraform `iam.tf`에 정의된 IAM Role의 ARN을 여기에 입력해야 합니다.
+    eks.amazonaws.com/role-arn: "arn:aws:iam::016562553479:role/community-backend-app-role"
+
+---
+# 3. 수정된 Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: backend-sa
+      containers:
+        - name: backend-container
+          image: "016562553479.dkr.ecr.ap-southeast-2.amazonaws.com/community-be:latest"
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DB_HOST
+              value: "$DB_HOST"
+            - name: DB_USER
+              value: "$DB_USER"
+            - name: DB_PASSWORD
+              value: "$DB_PASSWORD"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: "communitydb"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000 # 백엔드 컨테이너 포트와 일치시켜야 합니다
+  type: ClusterIP # 프론트엔드에서 내부 통신용으로 사용

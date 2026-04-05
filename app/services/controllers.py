@@ -1,11 +1,14 @@
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, Request
 from sqlalchemy import text
 import bcrypt
 import os
 import uuid
 import shutil
+import random
+from datetime import datetime
 
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif'}
+
 
 def save_image(file: UploadFile) -> str:
     if not file or not file.filename:
@@ -23,8 +26,13 @@ def save_image(file: UploadFile) -> str:
     return f"/static/images/{filename}"
 
 
-def get_current_user_id(request, db):
+def get_current_user_id(request: Request, db):
     session_id = request.cookies.get("session_id")
+    auth_header = request.headers.get("Authorization")
+
+    if not session_id and auth_header and auth_header.startswith("Bearer "):
+        session_id = auth_header.split(" ")[1]
+
     if not session_id:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
@@ -77,9 +85,7 @@ def login_controller(email, password, response, db):
     )
     db.commit()
 
-    response.set_cookie(key="session_id", value=session_id, httponly=True, samesite="Lax", secure=False)
-    return {"message": "로그인 성공"}
-
+    response.set_cookie(key="session_id", value=session_id, httponly=True, samesite="lax", secure=False)
 
 # 3. 로그아웃
 def logout_controller(request, response, db):
@@ -94,16 +100,42 @@ def logout_controller(request, response, db):
 # 4. 내 정보 조회
 def get_me_controller(request, db):
     user_id = get_current_user_id(request, db)
-    user = db.execute(text("SELECT id, email, nickname, image_url FROM users WHERE id = :uid"),
-                      {"uid": user_id}).fetchone()
-    return {"id": user.id, "email": user.email, "nickname": user.nickname, "profile_image": user.image_url}
+    user = db.execute(
+        text("SELECT id, email, nickname, image_url, turnip_amount, bell_amount, bio FROM users WHERE id = :uid"),
+        {"uid": user_id}).fetchone()
 
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "nickname": user.nickname,
+        "profile_image": user.image_url,
+        "turnip": user.turnip_amount or 0,
+        "bell": user.bell_amount or 0,
+        "bio": user.bio
+    }
+
+# 4. 소개팅 (Matching)
+def get_matching_users_controller(request, db):
+    user_id = get_current_user_id(request, db)
+    sql = text("""
+        SELECT id, nickname, image_url AS profile_image, bio 
+        FROM users 
+        WHERE id != :uid AND bio IS NOT NULL AND deleted_at IS NULL
+    """)
+    users = db.execute(sql, {"uid": user_id}).fetchall()
+    return [dict(row._mapping) for row in users]
 
 # 5. 게시글 목록 (삭제된 글 제외)
 def get_posts_list_controller(offset, limit, db):
     sql = text("""
                SELECT p.id,
+                      p.user_id,
                       p.title,
+                      p.contents,
+                      p.image_url,
                       p.likes_count,
                       p.views_count,
                       p.comments_count,
@@ -122,7 +154,10 @@ def get_posts_list_controller(offset, limit, db):
     for p in posts:
         results.append({
             "post_id": p.id,
+            "user_id": p.user_id,
             "title": p.title,
+            "contents": p.contents,
+            "image": p.image_url,
             "likes": p.likes_count,
             "comments": p.comments_count,
             "views": p.views_count,
@@ -143,7 +178,7 @@ def get_post_detail_controller(post_id, request, db):
                       image_url,
                       likes_count,
                       views_count,
-                      comments_count as comments_count,
+                      comments_count,
                       created_at,
                       deleted_at
                FROM posts
@@ -162,7 +197,8 @@ def get_post_detail_controller(post_id, request, db):
                           {"uid": current_user_id, "pid": post_id}).fetchone():
             db.execute(text("INSERT INTO views (user_id, post_id) VALUES (:uid, :pid)"),
                        {"uid": current_user_id, "pid": post_id})
-            db.execute(text("UPDATE posts SET views_count = views_count + 1 WHERE id = :pid"), {"pid": post_id})
+            db.execute(text("UPDATE posts SET views_count = COALESCE(views_count, 0) + 1 WHERE id = :pid"),
+                       {"pid": post_id})
             db.commit()
             post = db.execute(sql, {"pid": post_id}).fetchone()
     except:
@@ -176,8 +212,9 @@ def get_post_detail_controller(post_id, request, db):
 
     return {
         "post_id": post.id,
+        "user_id": post.user_id,
         "title": post.title,
-        "content": post.contents,
+        "contents": post.contents,
         "image": post.image_url,
         "likes_count": post.likes_count,
         "views_count": post.views_count,
@@ -191,18 +228,22 @@ def get_post_detail_controller(post_id, request, db):
 
 
 # 7. 게시글 작성
-def create_post_controller(title, content, image, request, db):
+def create_post_controller(title, contents, image, request, db):
     user_id = get_current_user_id(request, db)
     image_url = save_image(image)
-    sql = text(
-        "INSERT INTO posts (user_id, title, contents, image_url, created_at) VALUES (:uid, :title, :content, :img, NOW())")
-    db.execute(sql, {"uid": user_id, "title": title, "content": content, "img": image_url})
+
+    # 🚀 좋아요(likes_count), 조회수(views_count), 댓글수(comments_count)를 0으로 강제 삽입!
+    sql = text("""
+        INSERT INTO posts (user_id, title, contents, image_url, likes_count, views_count, comments_count, created_at) 
+        VALUES (:uid, :title, :contents, :img, 0, 0, 0, NOW())
+    """)
+    db.execute(sql, {"uid": user_id, "title": title, "contents": contents, "img": image_url})
     db.commit()
     return {"message": "게시글 등록 성공"}
 
 
 # 8. 게시글 수정
-def update_post_controller(post_id, title, content, image, request, db):
+def update_post_controller(post_id, title, contents, image, request, db):
     user_id = get_current_user_id(request, db)
     post = db.execute(text("SELECT user_id FROM posts WHERE id=:pid AND deleted_at IS NULL"),
                       {"pid": post_id}).fetchone()
@@ -211,10 +252,10 @@ def update_post_controller(post_id, title, content, image, request, db):
     if image:
         new_url = save_image(image)
         db.execute(text("UPDATE posts SET title=:t, contents=:c, image_url=:i WHERE id=:pid"),
-                   {"t": title, "c": content, "i": new_url, "pid": post_id})
+                   {"t": title, "c": contents, "i": new_url, "pid": post_id})
     else:
         db.execute(text("UPDATE posts SET title=:t, contents=:c WHERE id=:pid"),
-                   {"t": title, "c": content, "pid": post_id})
+                   {"t": title, "c": contents, "pid": post_id})
     db.commit()
     return {"message": "수정 완료"}
 
@@ -237,21 +278,25 @@ def like_post_controller(post_id, request, db):
     post = db.execute(text("SELECT * FROM posts WHERE id=:pid AND deleted_at IS NULL"), {"pid": post_id}).fetchone()
     if not post: raise HTTPException(status_code=404, detail="게시글 없음")
 
+    current_likes = post.likes_count if post.likes_count is not None else 0
     existing = db.execute(text("SELECT id FROM likes WHERE user_id=:uid AND post_id=:pid"),
                           {"uid": user_id, "pid": post_id}).fetchone()
     is_liked = False
+
     if existing:
         db.execute(text("DELETE FROM likes WHERE id=:lid"), {"lid": existing.id})
-        if post.likes_count > 0: db.execute(text("UPDATE posts SET likes_count = likes_count - 1 WHERE id=:pid"),
-                                           {"pid": post_id})
+        if current_likes > 0:
+            db.execute(text("UPDATE posts SET likes_count = :new_likes WHERE id=:pid"),
+                       {"new_likes": current_likes - 1, "pid": post_id})
     else:
         db.execute(text("INSERT INTO likes (user_id, post_id) VALUES (:uid, :pid)"), {"uid": user_id, "pid": post_id})
-        db.execute(text("UPDATE posts SET likes_count = likes_count + 1 WHERE id=:pid"), {"pid": post_id})
+        db.execute(text("UPDATE posts SET likes_count = :new_likes WHERE id=:pid"),
+                   {"new_likes": current_likes + 1, "pid": post_id})
         is_liked = True
+
     db.commit()
     updated = db.execute(text("SELECT likes_count FROM posts WHERE id=:pid"), {"pid": post_id}).fetchone()
-    return {"likes_count": updated.likes_count, "is_liked": is_liked}
-
+    return {"likes_count": updated.likes_count if updated.likes_count is not None else 0, "is_liked": is_liked}
 
 # 11. 댓글 작성
 def create_comment_controller(post_id, content, request, db):
@@ -268,7 +313,8 @@ def create_comment_controller(post_id, content, request, db):
     db.execute(
         text("INSERT INTO comments (post_id, user_id, content, created_at) VALUES (:pid, :uid, :content, NOW())"),
         {"pid": post_id, "uid": user_id, "content": content})
-    db.execute(text("UPDATE posts SET comments_count = comments_count + 1 WHERE id = :pid"), {"pid": post_id})
+    db.execute(text("UPDATE posts SET comments_count = COALESCE(comments_count, 0) + 1 WHERE id = :pid"),
+               {"pid": post_id})
     db.commit()
     return {"message": "댓글 등록"}
 
@@ -276,7 +322,7 @@ def create_comment_controller(post_id, content, request, db):
 # 12. 댓글 목록
 def get_comments_controller(post_id, request, db):
     sql = text("""
-               SELECT c.*, u.nickname, u.image_url
+               SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, u.nickname, u.image_url
                FROM comments c
                         JOIN users u ON c.user_id = u.id
                WHERE c.post_id = :pid
@@ -334,11 +380,21 @@ def check_email_controller(email, db):
     return {"message": "가능"}
 
 
-# 16. 닉네임 수정
-def update_nickname_controller(user_id, nickname, request, db):
+# 16. 프로필(닉네임/사진) 수정
+def update_nickname_controller(user_id, nickname, profile_image, request, db):
     current_user_id = get_current_user_id(request, db)
     if current_user_id != user_id: raise HTTPException(status_code=403, detail="권한 없음")
-    db.execute(text("UPDATE users SET nickname=:n WHERE id=:uid"), {"n": nickname, "uid": user_id})
+
+    # 🚀 새 사진이 들어왔다면 사진 저장 + 닉네임 변경
+    if profile_image:
+        new_image_url = save_image(profile_image)
+        db.execute(text("UPDATE users SET nickname=:n, image_url=:i WHERE id=:uid"),
+                   {"n": nickname, "i": new_image_url, "uid": user_id})
+    # 새 사진이 없다면 닉네임만 변경
+    else:
+        db.execute(text("UPDATE users SET nickname=:n WHERE id=:uid"),
+                   {"n": nickname, "uid": user_id})
+
     db.commit()
     return {"message": "수정 완료"}
 
@@ -361,3 +417,233 @@ def delete_user_controller(request, response, db):
     db.commit()
     response.delete_cookie("session_id")
     return {"message": "탈퇴 완료"}
+
+
+# --- Chat Controllers ---
+
+def initiate_chat_controller(recipient_id: int, request, db):
+    user_id = get_current_user_id(request, db)
+
+    if user_id == recipient_id:
+        raise HTTPException(status_code=400, detail="자기 자신과는 채팅할 수 없습니다.")
+
+    # 1:1 채팅방이 이미 존재하는지 확인
+    # 두 유저가 모두 참여하고 있는 방을 찾는다.
+    sql_find_room = text("""
+        SELECT p1.room_id
+        FROM chat_participants p1
+        JOIN chat_participants p2 ON p1.room_id = p2.room_id
+        WHERE p1.user_id = :user_id AND p2.user_id = :recipient_id
+    """)
+    result = db.execute(sql_find_room, {"user_id": user_id, "recipient_id": recipient_id}).fetchone()
+
+    if result:
+        # 이미 채팅방이 존재함
+        return {"room_id": result.room_id}
+
+    # 새 채팅방 생성
+    sql_create_room = text("INSERT INTO chat_rooms (created_at) VALUES (NOW())")
+    result = db.execute(sql_create_room)
+    db.commit()
+    new_room_id = result.lastrowid
+
+    # 참가자 추가
+    sql_add_participants = text("INSERT INTO chat_participants (room_id, user_id) VALUES (:room_id, :user_id)")
+    db.execute(sql_add_participants, {"room_id": new_room_id, "user_id": user_id})
+    db.execute(sql_add_participants, {"room_id": new_room_id, "user_id": recipient_id})
+
+    db.commit()
+
+    return {"room_id": new_room_id}
+
+
+def get_chat_list_controller(request, db):
+    user_id = get_current_user_id(request, db)
+
+    # 사용자가 참여하고 있는 모든 채팅방과 상대방 정보, 마지막 메시지, 안읽은 메시지 수를 가져온다.
+    sql = text("""
+        SELECT
+            cr.id AS room_id,
+            other_user.id AS other_user_id,
+            other_user.nickname AS other_user_nickname,
+            other_user.image_url AS other_user_image_url,
+            last_message.content AS last_message_content,
+            last_message.created_at AS last_message_created_at,
+            (SELECT COUNT(id) FROM messages WHERE room_id = cr.id AND is_read = 0 AND sender_id != :user_id) AS unread_count
+        FROM chat_rooms cr
+        JOIN chat_participants cp_me ON cr.id = cp_me.room_id AND cp_me.user_id = :user_id
+        JOIN chat_participants cp_other ON cr.id = cp_other.room_id AND cp_other.user_id != :user_id
+        JOIN users other_user ON cp_other.user_id = other_user.id
+        LEFT JOIN (
+            SELECT 
+                m.room_id, 
+                m.content, 
+                m.created_at
+            FROM messages m
+            INNER JOIN (
+                SELECT room_id, MAX(created_at) as max_created_at
+                FROM messages
+                GROUP BY room_id
+            ) lm ON m.room_id = lm.room_id AND m.created_at = lm.max_created_at
+        ) AS last_message ON cr.id = last_message.room_id
+        ORDER BY last_message.created_at DESC;
+    """)
+
+    results = db.execute(sql, {"user_id": user_id}).fetchall()
+
+    return {"chats": [dict(row._mapping) for row in results]}
+
+def get_messages_controller(room_id: int, request, db):
+    user_id = get_current_user_id(request, db)
+
+    # 사용자가 이 채팅방의 참여자인지 확인
+    sql_check_participant = text("SELECT id FROM chat_participants WHERE room_id = :room_id AND user_id = :user_id")
+    if not db.execute(sql_check_participant, {"room_id": room_id, "user_id": user_id}).fetchone():
+        raise HTTPException(status_code=403, detail="채팅방에 접근할 권한이 없습니다.")
+
+    # 메시지 가져오기
+    sql_get_messages = text("""
+        SELECT id, sender_id, content, created_at, is_read
+        FROM messages
+        WHERE room_id = :room_id
+        ORDER BY created_at ASC
+    """)
+    messages = db.execute(sql_get_messages, {"room_id": room_id}).fetchall()
+
+    # 상대방이 보낸 메시지 읽음 처리
+    sql_mark_as_read = text(
+        "UPDATE messages SET is_read = 1 WHERE room_id = :room_id AND sender_id != :user_id AND is_read = 0")
+    db.execute(sql_mark_as_read, {"room_id": room_id, "user_id": user_id})
+    db.commit()
+
+    return {"messages": [dict(row._mapping) for row in messages]}
+
+# --- 지도 및 사용자 위치 ---
+def get_all_users_locations_controller(db):
+    # 지도에 뿌려줄 모든 사용자의 간단한 정보 조회
+    sql = text("SELECT id, nickname, image_url FROM users WHERE deleted_at IS NULL")
+    users = db.execute(sql).fetchall()
+    return [{"id": u.id, "nickname": u.nickname, "image_url": u.image_url} for u in users]
+
+
+# --- 기차표 예매 ---
+def reserve_train_controller(train_data, request, db):
+    user_id = get_current_user_id(request, db)
+    # 실제 환경에서는 Redis 대기열 로직이 들어가야 하지만, 로컬용으로 즉시 저장 구현
+    sql = text("""
+        INSERT INTO train_reservations (user_id, train_number, departure_time)
+        VALUES (:uid, :t_num, :d_time)
+    """)
+    db.execute(sql, {
+        "uid": user_id,
+        "t_num": train_data.get("train_number"),
+        "d_time": train_data.get("departure_time")
+    })
+    db.commit()
+    return {"message": "예약이 완료되었습니다.", "queue_number": 0}
+
+def get_my_train_reservations_controller(request, db):
+    user_id = get_current_user_id(request, db)
+    # 예약 시간이 가까운 순서대로 내 티켓을 불러옵니다.
+    sql = text("""
+        SELECT id, train_number, departure_time, status, created_at
+        FROM train_reservations
+        WHERE user_id = :uid
+        ORDER BY departure_time DESC
+    """)
+    reservations = db.execute(sql, {"uid": user_id}).fetchall()
+
+    results = []
+    for r in reservations:
+        results.append({
+            "id": r.id,
+            "train_number": r.train_number,
+            "departure_time": str(r.departure_time),  # 날짜를 문자열로 변환
+            "status": r.status
+        })
+    return {"reservations": results}
+
+def delete_train_reservation_controller(reservation_id, request, db):
+    user_id = get_current_user_id(request, db)
+
+    # 내 예약이 맞는지 확인하고 삭제 진행
+    sql = text("DELETE FROM train_reservations WHERE id = :res_id AND user_id = :uid")
+    result = db.execute(sql, {"res_id": reservation_id, "uid": user_id})
+    db.commit()
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="존재하지 않거나 이미 취소된 기차표입니다.")
+
+    return {"message": "예매가 성공적으로 취소되었습니다."}
+
+
+# --- 소개팅 (Matching) ---
+def update_bio_controller(bio_data, request, db):
+    user_id = get_current_user_id(request, db)
+    sql = text("UPDATE users SET bio = :bio WHERE id = :uid")  # User 테이블에 bio 컬럼 필요
+    db.execute(sql, {"bio": bio_data.get("bio"), "uid": user_id})
+    db.commit()
+    return {"message": "소개글이 수정되었습니다."}
+
+
+# --- 무 주식 (Turnip Market) ---
+def get_daily_turnip_price():
+    # 오늘 날짜를 시드로 사용하여 항상 같은 가격을 반환
+    today_seed = int(datetime.now().strftime("%Y%m%d"))
+    random.seed(today_seed)
+    return random.randint(50, 600)
+
+
+def get_turnip_price_controller():
+    return {"current_price": get_daily_turnip_price()}
+
+
+def trade_turnip_controller(trade_data, request, db):
+    user_id = get_current_user_id(request, db)
+    trade_type = trade_data.get("type")  # 'buy' or 'sell'
+    quantity = trade_data.get("quantity")
+    price_from_client = trade_data.get("price")
+
+    current_server_price = get_daily_turnip_price()
+    if price_from_client != current_server_price:
+        raise HTTPException(status_code=400, detail="시세가 변경되었습니다. 다시 시도해주세요.")
+
+    total_cost = quantity * current_server_price
+
+    user_sql = text("SELECT bell_amount, turnip_amount FROM users WHERE id = :uid")
+    user = db.execute(user_sql, {"uid": user_id}).fetchone()
+
+    current_bell = user.bell_amount if user.bell_amount is not None else 2000
+    current_turnip = user.turnip_amount if user.turnip_amount is not None else 0
+
+    if trade_type == 'buy':
+        if current_bell < total_cost:
+            raise HTTPException(status_code=400, detail="벨이 부족합니다.")
+        # 파이썬에서 미리 계산해서 넣어주기
+        update_user_sql = text("UPDATE users SET bell_amount = :new_bell, turnip_amount = :new_turnip WHERE id = :uid")
+        db.execute(update_user_sql,
+                   {"new_bell": current_bell - total_cost, "new_turnip": current_turnip + quantity, "uid": user_id})
+
+    elif trade_type == 'sell':
+        if current_turnip < quantity:
+            raise HTTPException(status_code=400, detail="보유한 무가 부족합니다.")
+        # 파이썬에서 미리 계산해서 넣어주기
+        update_user_sql = text("UPDATE users SET bell_amount = :new_bell, turnip_amount = :new_turnip WHERE id = :uid")
+        db.execute(update_user_sql,
+                   {"new_bell": current_bell + total_cost, "new_turnip": current_turnip - quantity, "uid": user_id})
+    else:
+        raise HTTPException(status_code=400, detail="잘못된 거래 타입입니다.")
+
+    log_sql = text(
+        "INSERT INTO turnip_transactions (user_id, type, quantity, price, created_at) VALUES (:uid, :type, :q, :p, NOW())")
+    db.execute(log_sql, {"uid": user_id, "type": trade_type, "q": quantity, "p": current_server_price})
+
+    db.commit()
+
+    updated_user = db.execute(user_sql, {"uid": user_id}).fetchone()
+
+    return {
+        "message": "거래 성공",
+        "bell_amount": updated_user.bell_amount,
+        "turnip_amount": updated_user.turnip_amount
+    }
