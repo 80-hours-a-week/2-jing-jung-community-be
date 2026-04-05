@@ -380,11 +380,21 @@ def check_email_controller(email, db):
     return {"message": "가능"}
 
 
-# 16. 닉네임 수정
-def update_nickname_controller(user_id, nickname, request, db):
+# 16. 프로필(닉네임/사진) 수정
+def update_nickname_controller(user_id, nickname, profile_image, request, db):
     current_user_id = get_current_user_id(request, db)
     if current_user_id != user_id: raise HTTPException(status_code=403, detail="권한 없음")
-    db.execute(text("UPDATE users SET nickname=:n WHERE id=:uid"), {"n": nickname, "uid": user_id})
+
+    # 🚀 새 사진이 들어왔다면 사진 저장 + 닉네임 변경
+    if profile_image:
+        new_image_url = save_image(profile_image)
+        db.execute(text("UPDATE users SET nickname=:n, image_url=:i WHERE id=:uid"),
+                   {"n": nickname, "i": new_image_url, "uid": user_id})
+    # 새 사진이 없다면 닉네임만 변경
+    else:
+        db.execute(text("UPDATE users SET nickname=:n WHERE id=:uid"),
+                   {"n": nickname, "uid": user_id})
+
     db.commit()
     return {"message": "수정 완료"}
 

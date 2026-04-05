@@ -50,8 +50,14 @@ def check_email(email: str, db: Session = Depends(get_db)):
     return controllers.check_email_controller(email, db)
 
 @router.patch("/users/{user_id}")
-def update_nickname(user_id: int, req: NicknameRequest, request: Request, db: Session = Depends(get_db)):
-    return controllers.update_nickname_controller(user_id, req.nickname, request, db)
+def update_nickname(
+    user_id: int,
+    request: Request,
+    nickname: str = Form(...),                                # 🚀 JSON 대신 Form 데이터로 닉네임 받기
+    profile_image: Optional[UploadFile] = File(None),         # 🚀 선택적으로 사진 파일 받기
+    db: Session = Depends(get_db)
+):
+    return controllers.update_nickname_controller(user_id, nickname, profile_image, request, db)
 
 @router.put("/users/me/password")
 def update_password(req: PasswordRequest, request: Request, db: Session = Depends(get_db)):
