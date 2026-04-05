@@ -197,7 +197,8 @@ def get_post_detail_controller(post_id, request, db):
                           {"uid": current_user_id, "pid": post_id}).fetchone():
             db.execute(text("INSERT INTO views (user_id, post_id) VALUES (:uid, :pid)"),
                        {"uid": current_user_id, "pid": post_id})
-            db.execute(text("UPDATE posts SET views_count = views_count + 1 WHERE id = :pid"), {"pid": post_id})
+            db.execute(text("UPDATE posts SET views_count = COALESCE(views_count, 0) + 1 WHERE id = :pid"),
+                       {"pid": post_id})
             db.commit()
             post = db.execute(sql, {"pid": post_id}).fetchone()
     except:
@@ -312,7 +313,8 @@ def create_comment_controller(post_id, content, request, db):
     db.execute(
         text("INSERT INTO comments (post_id, user_id, content, created_at) VALUES (:pid, :uid, :content, NOW())"),
         {"pid": post_id, "uid": user_id, "content": content})
-    db.execute(text("UPDATE posts SET comments_count = comments_count + 1 WHERE id = :pid"), {"pid": post_id})
+    db.execute(text("UPDATE posts SET comments_count = COALESCE(comments_count, 0) + 1 WHERE id = :pid"),
+               {"pid": post_id})
     db.commit()
     return {"message": "댓글 등록"}
 
